@@ -1,0 +1,97 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  name      String
+  phone     String   @unique
+  createdAt DateTime @default(now())
+  requests  RideRequest[]
+}
+
+model Driver {
+  id              String   @id @default(uuid())
+  name            String
+  phone           String   @unique
+  totalSeats      Int      @default(4)
+  luggageCapacity Int      @default(2)
+  status          DriverStatus @default(AVAILABLE) // AVAILABLE, BUSY, OFFLINE
+  currentLat      Float
+  currentLng      Float
+  createdAt       DateTime @default(now())
+  pools           RidePool[]
+}
+
+model RideRequest {
+  id              String   @id @default(uuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id])
+  pickupLat       Float
+  pickupLng       Float
+  dropLat         Float
+  dropLng         Float
+  seats           Int      @default(1)
+  luggage         Int      @default(0)
+  detourTolerance Float    @default(5.0) // km
+  status          RequestStatus @default(PENDING) // PENDING, MATCHED, CANCELLED, COMPLETED
+  createdAt       DateTime @default(now())
+  poolPassenger   PoolPassenger?
+}
+
+model RidePool {
+  id              String   @id @default(uuid())
+  driverId        String?
+  driver          Driver?  @relation(fields: [driverId], references: [id])
+  status          PoolStatus @default(MATCHING) // MATCHING, ON_RIDE, COMPLETED
+  passengers      PoolPassenger[]
+  route           Json      // Store ordered waypoints as JSON array of coords
+  totalFare       Float     @default(0)
+  createdAt       DateTime  @default(now())
+}
+
+model PoolPassenger {
+  id            String      @id @default(uuid())
+  poolId        String
+  pool          RidePool    @relation(fields: [poolId], references: [id])
+  requestId     String      @unique
+  request       RideRequest @relation(fields: [requestId], references: [id])
+  assignedFare  Float
+  pickupOrder   Int         // 0 -> first pickup inside pool
+  dropOrder     Int         // relative index
+  status        PassengerStatus @default(WAITING) // WAITING, PICKED_UP, DROPPED
+}
+
+enum DriverStatus {
+  AVAILABLE
+  BUSY
+  OFFLINE
+}
+
+enum RequestStatus {
+  PENDING
+  MATCHED
+  CANCELLED
+  COMPLETED
+}
+
+enum PoolStatus {
+  MATCHING
+  ON_RIDE
+  COMPLETED
+}
+
+enum PassengerStatus {
+  WAITING
+  PICKED_UP
+  DROPPED
+  CANCELLED
+}
