@@ -2,6 +2,7 @@ const express = require('express');
 const dotenv = require('dotenv');
 const rideRoutes = require('./routes/rideRoutes');
 const driverRoutes = require('./routes/driverRoutes');
+const userRoutes = require('./routes/userRoutes');
 
 dotenv.config();
 
@@ -44,8 +45,142 @@ const swaggerDocument = {
                     400: { description: 'Bad request' }
                 }
             }
+        },
+        '/rides/{id}': {
+            get: {
+                summary: 'Get ride status',
+                parameters: [
+                    {
+                        name: 'id',
+                        in: 'path',
+                        required: true,
+                        schema: { type: 'string' }
+                    }
+                ],
+                responses: {
+                    200: { description: 'Ride details' },
+                    404: { description: 'Ride not found' }
+                }
+            }
+        },
+        '/rides/{id}/cancel': {
+            post: {
+                summary: 'Cancel ride',
+                parameters: [
+                    {
+                        name: 'id',
+                        in: 'path',
+                        required: true,
+                        schema: { type: 'string' }
+                    }
+                ],
+                responses: {
+                    200: { description: 'Ride cancelled' }
+                }
+            }
+        },
+        '/users': {
+            post: {
+                summary: 'Create a new user',
+                requestBody: {
+                    content: {
+                        'application/json': {
+                            schema: {
+                                type: 'object',
+                                properties: {
+                                    name: { type: 'string' },
+                                    phone: { type: 'string' }
+                                },
+                                required: ['name', 'phone']
+                            }
+                        }
+                    }
+                },
+                responses: {
+                    201: { description: 'User created' },
+                    400: { description: 'Bad request' }
+                }
+            }
+        },
+        '/users/{id}': {
+            get: {
+                summary: 'Get user by ID',
+                parameters: [
+                    {
+                        name: 'id',
+                        in: 'path',
+                        required: true,
+                        schema: { type: 'string' }
+                    }
+                ],
+                responses: {
+                    200: { description: 'User details' },
+                    404: { description: 'User not found' }
+                }
+            }
+        },
+        '/drivers': {
+            post: {
+                summary: 'Create a new driver',
+                requestBody: {
+                    content: {
+                        'application/json': {
+                            schema: {
+                                type: 'object',
+                                properties: {
+                                    name: { type: 'string' },
+                                    phone: { type: 'string' },
+                                    seats: { type: 'integer', default: 4 },
+                                    luggage: { type: 'integer', default: 2 },
+                                    lat: { type: 'number' },
+                                    lng: { type: 'number' }
+                                },
+                                required: ['name', 'phone', 'lat', 'lng']
+                            }
+                        }
+                    }
+                },
+                responses: {
+                    201: { description: 'Driver created' },
+                    500: { description: 'Server error' }
+                }
+            }
+        },
+        '/drivers/{id}/location': {
+            put: {
+                summary: 'Update driver location and status',
+                parameters: [
+                    {
+                        name: 'id',
+                        in: 'path',
+                        required: true,
+                        schema: { type: 'string' }
+                    }
+                ],
+                requestBody: {
+                    content: {
+                        'application/json': {
+                            schema: {
+                                type: 'object',
+                                properties: {
+                                    lat: { type: 'number' },
+                                    lng: { type: 'number' },
+                                    status: {
+                                        type: 'string',
+                                        enum: ['AVAILABLE', 'BUSY', 'OFFLINE']
+                                    }
+                                },
+                                required: ['lat', 'lng']
+                            }
+                        }
+                    }
+                },
+                responses: {
+                    200: { description: 'Driver updated' },
+                    500: { description: 'Server error' }
+                }
+            }
         }
-        // More paths can be added
     }
 };
 
@@ -54,6 +189,7 @@ app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 // Routes
 app.use('/rides', rideRoutes);
 app.use('/drivers', driverRoutes);
+app.use('/users', userRoutes);
 
 // Health Check
 app.get('/', (req, res) => {

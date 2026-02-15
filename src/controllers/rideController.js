@@ -43,7 +43,7 @@ exports.getRideStatus = async (req, res) => {
         const request = await prisma.rideRequest.findUnique({
             where: { id },
             include: {
-                pool: {
+                poolPassenger: {
                     include: {
                         pool: {
                             include: { driver: true }
@@ -60,8 +60,21 @@ exports.getRideStatus = async (req, res) => {
         let response = {
             id: request.id,
             status: request.status,
-            poolId: request.pool ? request.pool.poolId : null,
-            driver: request.pool?.pool?.driver || null
+            pickupLocation: {
+                lat: request.pickupLat,
+                lng: request.pickupLng
+            },
+            dropLocation: {
+                lat: request.dropLat,
+                lng: request.dropLng
+            },
+            seats: request.seats,
+            luggage: request.luggage,
+            poolId: request.poolPassenger ? request.poolPassenger.poolId : null,
+            assignedFare: request.poolPassenger ? request.poolPassenger.assignedFare : null,
+            pickupOrder: request.poolPassenger ? request.poolPassenger.pickupOrder : null,
+            dropOrder: request.poolPassenger ? request.poolPassenger.dropOrder : null,
+            driver: request.poolPassenger?.pool?.driver || null
         };
 
         res.json(response);
@@ -74,17 +87,68 @@ exports.getRideStatus = async (req, res) => {
 exports.cancelRide = async (req, res) => {
     try {
         const { id } = req.params;
-        // Update status to cancelled
-        const request = await prisma.rideRequest.update({
-            where: { id },
-            data: { status: 'CANCELLED' }
+
+        // Use transaction to ensure consistency
+        await prisma.$transaction(async (tx) => {
+            const request = await tx.rideRequest.findUnique({
+                where: { id },
+                include: {
+                    poolPassenger: {
+                        include: {
+                            pool: {
+                                include: { passengers: true, driver: true }
+                            }
+                        }
+                    }
+                }
+            });
+
+            if (!request) {
+                throw new Error('Request not found');
+            }
+
+            // Update request status to CANCELLED
+            await tx.rideRequest.update({
+                where: { id },
+                data: { status: 'CANCELLED' }
+            });
+
+            // If matched to a pool, remove from pool
+            if (request.poolPassenger) {
+                const poolPassenger = request.poolPassenger;
+                const pool = poolPassenger.pool;
+
+                // Update passenger status
+                await tx.poolPassenger.update({
+                    where: { id: poolPassenger.id },
+                    data: { status: 'CANCELLED' }
+                });
+
+                // Check if pool is now empty (all passengers cancelled)
+                const activePassengers = pool.passengers.filter(
+                    p => p.status !== 'CANCELLED' && p.id !== poolPassenger.id
+                );
+
+                if (activePassengers.length === 0) {
+                    // Pool is empty, complete it and free the driver
+                    await tx.ridePool.update({
+                        where: { id: pool.id },
+                        data: { status: 'COMPLETED' }
+                    });
+
+                    if (pool.driver) {
+                        await tx.driver.update({
+                            where: { id: pool.driver.id },
+                            data: { status: 'AVAILABLE' }
+                        });
+                    }
+                }
+            }
         });
 
-        // Logic to remove from pool if already matched would go here
-
-        res.json({ message: 'Ride cancelled', requestId: id });
+        res.json({ message: 'Ride cancelled successfully', requestId: id });
     } catch (error) {
         console.error('Cancel Error:', error);
-        res.status(500).json({ error: 'Internal Server Error' });
+        res.status(500).json({ error: error.message || 'Internal Server Error' });
     }
 };

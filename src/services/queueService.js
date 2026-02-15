@@ -9,6 +9,14 @@ const connection = new Redis({
     maxRetriesPerRequest: null,
 });
 
+connection.on('connect', () => {
+    console.log('✅ Redis connected successfully');
+});
+
+connection.on('error', (err) => {
+    console.error('❌ Redis connection error:', err.message);
+});
+
 const MATCH_QUEUE_NAME = 'RideMatchingQueue';
 
 // Queue Producer
@@ -33,12 +41,18 @@ const matchWorker = new Worker(MATCH_QUEUE_NAME, async (job) => {
     }
 }, { connection });
 
+console.log('🚀 Ride matching worker initialized');
+
 matchWorker.on('completed', job => {
     console.log(`${job.id} has completed!`);
 });
 
 matchWorker.on('failed', (job, err) => {
     console.log(`${job.id} has failed with ${err.message}`);
+});
+
+matchWorker.on('error', (err) => {
+    console.error('Worker error:', err);
 });
 
 module.exports = {

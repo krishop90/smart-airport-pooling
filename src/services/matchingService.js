@@ -46,9 +46,54 @@ async function matchRequest(requestId) {
 
         if (distDriverToPickup > MATCHING_RADIUS_KM) continue;
 
-        // Check detour tolerance (simplified: ensure pickup is somewhat along the route)
-        // For this version, we trust the radius check and capacity.
-        // real implementation would simulate route insertion.
+        // Detour tolerance check - calculate max detour from existing passengers
+        let maxDetourExceeded = false;
+        for (const passenger of pool.passengers) {
+            const directDist = calculateDistance(
+                passenger.request.pickupLat, passenger.request.pickupLng,
+                passenger.request.dropLat, passenger.request.dropLng
+            );
+
+            // Simplified detour: distance via new passenger's points
+            const detourDist = calculateDistance(
+                passenger.request.pickupLat, passenger.request.pickupLng,
+                request.pickupLat, request.pickupLng
+            ) + calculateDistance(
+                request.pickupLat, request.pickupLng,
+                passenger.request.dropLat, passenger.request.dropLng
+            );
+
+            const detour = detourDist - directDist;
+
+            // Check if detour exceeds tolerance for existing passenger
+            if (detour > passenger.request.detourTolerance) {
+                maxDetourExceeded = true;
+                break;
+            }
+        }
+
+        if (maxDetourExceeded) continue;
+
+        // Check detour for new passenger
+        const newPassengerDirectDist = calculateDistance(
+            request.pickupLat, request.pickupLng,
+            request.dropLat, request.dropLng
+        );
+
+        // Simplified: if there are existing passengers, check detour
+        if (pool.passengers.length > 0) {
+            const firstPassenger = pool.passengers[0].request;
+            const detourViaFirst = calculateDistance(
+                request.pickupLat, request.pickupLng,
+                firstPassenger.pickupLat, firstPassenger.pickupLng
+            ) + calculateDistance(
+                firstPassenger.pickupLat, firstPassenger.pickupLng,
+                request.dropLat, request.dropLng
+            );
+
+            const newDetour = detourViaFirst - newPassengerDirectDist;
+            if (newDetour > request.detourTolerance) continue;
+        }
 
         return await addToPool(pool.id, request);
     }
@@ -87,7 +132,15 @@ async function findNearestDriver(request) {
 async function addToPool(poolId, request) {
     // Transaction to ensure consistency
     return await prisma.$transaction(async (tx) => {
-        // Double check pool status in tx?
+        // Get current pool state
+        const pool = await tx.ridePool.findUnique({
+            where: { id: poolId },
+            include: { passengers: true }
+        });
+
+        // Calculate pickup and drop order
+        const pickupOrder = pool.passengers.length; // 0-indexed: new passenger picks up after existing ones
+        const dropOrder = pool.passengers.length;   // Same for drop
 
         // Add passenger
         const passenger = await tx.poolPassenger.create({
@@ -98,8 +151,8 @@ async function addToPool(poolId, request) {
                     calculateDistance(request.pickupLat, request.pickupLng, request.dropLat, request.dropLng),
                     request.luggage || 0
                 ),
-                pickupOrder: 1, // simplified
-                dropOrder: 1    // simplified
+                pickupOrder: pickupOrder,
+                dropOrder: dropOrder
             }
         });
 
