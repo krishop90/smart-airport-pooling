@@ -64,10 +64,10 @@ docker-compose up -d
 ### 4. Configure Environment
 Create `.env` file:
 ```env
-DATABASE_URL="postgresql://postgres:krish20@localhost:5433/airport_pool?schema=public"
-REDIS_HOST=localhost
-REDIS_PORT=6379
-PORT=3000
+DATABASE_URL=""
+REDIS_HOST=
+REDIS_PORT=
+PORT=
 ```
 
 ### 5. Run Database Migrations
